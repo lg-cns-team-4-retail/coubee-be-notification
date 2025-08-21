@@ -3,21 +3,6 @@ kind: Service
 metadata:
   name: coubee-external-kafka-service
   namespace: default
-  labels:
-    app.kubernetes.io/name: kafka
-    app.kubernetes.io/component: messaging
-    app.kubernetes.io/part-of: coubee-backend
-  annotations:
-    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
-    service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
-    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
-    service.beta.kubernetes.io/aws-load-balancer-hostname: "kafka-nlb-fb43a0de3cc628bd.elb.ap-northeast-2.amazonaws.com"
 spec:
-  type: LoadBalancer
-  sessionAffinity: None
-  ports:
-    - name: kafka
-      protocol: TCP
-      port: 9092
-      targetPort: 9092
-  # No selector - using EndpointSlice for external service mapping
+  type: ExternalName
+  externalName: kafka-nlb-fb43a0de3cc628bd.elb.ap-northeast-2.amazonaws.com
