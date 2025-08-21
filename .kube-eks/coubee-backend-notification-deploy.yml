@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: coubee-be-notification
-          image: 310095858382.dkr.ecr.ap-northeast-2.amazonaws.com/coubee-be-notification
+          image: 310095858382.dkr.ecr.ap-northeast-2.amazonaws.com/coubee-be-notification:0.0.1
           imagePullPolicy: Always
           env:
             - name: SPRING_PROFILES_ACTIVE
