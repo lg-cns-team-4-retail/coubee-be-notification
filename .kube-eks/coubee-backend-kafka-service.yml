@@ -1,11 +1,21 @@
-# kafka-service.yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: kafka-service
+  name: coubee-external-kafka-service
+  namespace: default
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/component: messaging
+    app.kubernetes.io/part-of: coubee-backend
+  annotations:
+    service.kubernetes.io/topology-mode: Auto
 spec:
-  # Endpoints 리소스를 통해 수동으로 매핑되므로 selector는 지정하지 않습니다.
+  type: ClusterIP
+  sessionAffinity: None
   ports:
-    - protocol: TCP
+    - name: kafka
+      protocol: TCP
       port: 9092
       targetPort: 9092
+      appProtocol: tcp
+  # No selector - using EndpointSlice for external service mapping

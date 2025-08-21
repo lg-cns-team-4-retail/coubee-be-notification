@@ -9,4 +9,4 @@ data:
 
     spring:
       kafka:
-        bootstrap-servers: kafka-service:9092
+        bootstrap-servers: coubee-external-kafka-service:9092
