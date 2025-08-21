@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coubee-be-notification-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coubee-be-notification
+  template:
+    metadata:
+      labels:
+        app: coubee-be-notification
+    spec:
+      containers:
+        - name: coubee-be-notification
+          image: mingyoolee/coubee-be-notification:0.0.1
+          imagePullPolicy: Always
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: stg
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - mountPath: /etc/config
+              name: coubee-be-notification-config-volume
+      volumes:
+        - name: coubee-be-notification-config-volume
+          configMap:
+            name: coubee-be-notification-config
+            items:
+              - key: application-stg.yml
+                path: application-stg.yml

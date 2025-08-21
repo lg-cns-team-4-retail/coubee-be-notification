@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: kafka-service # 서비스와 이름이 반드시 동일해야 합니다.
+subsets:
+  - addresses:
+      - hostname: kafka-nlb-fb43a0de3cc628bd.elb.ap-northeast-2.amazonaws.com
+    ports:
+      - port: 9092 # 카프카가 통신하는 포트

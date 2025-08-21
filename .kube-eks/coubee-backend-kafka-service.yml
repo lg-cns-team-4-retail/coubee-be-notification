@@ -1,0 +1,11 @@
+# kafka-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-service
+spec:
+  # Endpoints 리소스를 통해 수동으로 매핑되므로 selector는 지정하지 않습니다.
+  ports:
+    - protocol: TCP
+      port: 9092
+      targetPort: 9092
