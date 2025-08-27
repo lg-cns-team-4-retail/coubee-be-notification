@@ -22,5 +22,5 @@ public class OrderStatusUpdateEvent {
 
     private String message;
 
-    // private LocalDateTime timestamp;
+    private LocalDateTime timestamp;
 }
