@@ -1,6 +1,7 @@
 package com.coubee.coubeebenotification.event.consumer;
 
-import com.coubee.coubeebenotification.event.consumer.message.user.SiteUserInfoEvent;
+import com.coubee.coubeebenotification.event.consumer.message.order.OrderStatusUpdateEvent;
+import com.coubee.coubeebenotification.event.publisher.EventBridgePublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -12,15 +13,19 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class KafkaMessageConsumer {
+    
+    private final EventBridgePublisher eventBridgePublisher;
+
     @KafkaListener(
-            topics = SiteUserInfoEvent.Topic,
+            topics = OrderStatusUpdateEvent.Topic,
             properties = {
                     JsonDeserializer.VALUE_DEFAULT_TYPE
-                            + ":com.coubee.coubeebenotification.event.consumer.message.user.SiteUserInfoEvent"
+                            + ":com.coubee.coubeebenotification.event.consumer.message.order.OrderStatusUpdateEvent"
             }
     )
-    void handleSiteUserInfoEvent(SiteUserInfoEvent event, Acknowledgment ack) {
-        log.info("SiteUserInfoEvent 처리. userId={}", event.getUsername());
+    void handleOrderStatusUpdateEvent(OrderStatusUpdateEvent event, Acknowledgment ack) {
+        eventBridgePublisher.publishOrderStatusUpdateEvent(event);
+            
         ack.acknowledge();
     }
 }
