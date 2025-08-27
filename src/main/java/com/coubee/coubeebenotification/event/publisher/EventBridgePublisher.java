@@ -68,6 +68,7 @@ public class EventBridgePublisher {
     public void publishOrderStatusUpdateEvent(OrderStatusUpdateEvent orderEvent) {
         // OrderStatusUpdateEvent에서 실제 데이터 추출
         Map<String, Object> notificationData = Map.of(
+                "messageId", orderEvent.getEventId(),
                 "userId", orderEvent.getUserId(),
                 "messageType", orderEvent.getNotificationType(),
                 "title", orderEvent.getTitle(),
