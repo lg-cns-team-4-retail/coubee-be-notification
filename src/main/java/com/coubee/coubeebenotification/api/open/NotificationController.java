@@ -4,8 +4,6 @@ import com.coubee.coubeebenotification.common.web.context.GatewayRequestHeaderUt
 import com.coubee.coubeebenotification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -17,7 +15,7 @@ public class NotificationController {
 
     private final NotificationService notificationService;
 
-    @GetMapping(value = "/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @GetMapping(value = "/subscribe")
     public SseEmitter subscribe() {
         Long userId = GatewayRequestHeaderUtils.getUserIdOrThrowException();
 
