@@ -29,7 +29,7 @@ public class KafkaMessageConsumer {
         try {
             log.info("Received Kafka event: {}", event);
 
-            if(event.getNotificationType().equals("PAYED") || event.getNotificationType().equals("CANCELLED_USER")) {
+            if(event.getNotificationType().equals("PAID") || event.getNotificationType().equals("PAYED") || event.getNotificationType().equals("CANCELLED_USER")) {
                 // SSE를 통해 실시간 알림 전송
                 notificationService.sendOrderNotification(event);
             } else {
