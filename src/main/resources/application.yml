@@ -29,3 +29,9 @@ aws:
 server:
   http2:
     enabled: false
+  tomcat:
+    keep-alive-timeout: 60000
+    max-keep-alive-requests: 100
+    connection-timeout: 20000
+  compression:
+    enabled: false # SSE에서는 압축 비활성화

@@ -30,7 +30,7 @@ public class NotificationService {
             return thread;
         });
         
-        heartbeatScheduler.scheduleWithFixedDelay(this::sendHeartbeat, 30, 30, TimeUnit.SECONDS);
+        heartbeatScheduler.scheduleWithFixedDelay(this::sendHeartbeat, 5, 15, TimeUnit.SECONDS); // 5초 후 시작, 15초마다 실행
         log.info("SSE heartbeat scheduler initialized");
     }
 
@@ -68,15 +68,33 @@ public class NotificationService {
             log.info("Removed existing SSE connection for userId: {}", userId);
         }
         
-        SseEmitter emitter = new SseEmitter(60 * 1000L * 30); // 30분 타임아웃
+        SseEmitter emitter = new SseEmitter(0L); // 무한 타임아웃 (heartbeat으로 관리)
         emitterMap.put(userIdStr, emitter);
 
         try {
-            emitter.send(SseEmitter.event().name("INIT").data("SSE 연결됨"));
-            log.info("SSE connection created for userId: {}", userId);
+            // 연결 즉시 초기화 메시지 전송
+            emitter.send(SseEmitter.event()
+                    .name("INIT")
+                    .data(Map.of(
+                            "message", "SSE 연결됨",
+                            "userId", userIdStr,
+                            "timestamp", System.currentTimeMillis()
+                    )));
+            
+            // 추가로 즉시 heartbeat 전송 (연결 확인용)
+            emitter.send(SseEmitter.event()
+                    .name("HEARTBEAT")
+                    .data(Map.of(
+                            "type", "initial_heartbeat",
+                            "timestamp", System.currentTimeMillis()
+                    )));
+            
+            log.info("SSE connection created and initialized for userId: {}", userId);
         } catch (IOException e) {
             log.error("Failed to send initial message for userId: {}", userId, e);
+            emitterMap.remove(userIdStr);
             emitter.completeWithError(e);
+            return emitter;
         }
 
         emitter.onCompletion(() -> {
