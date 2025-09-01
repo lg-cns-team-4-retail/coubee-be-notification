@@ -35,3 +35,30 @@ server:
     connection-timeout: 20000
   compression:
     enabled: false # SSE에서는 압축 비활성화
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    distribution:
+      percentiles-histogram:
+        sse.heartbeat.duration: true
+        sse.notification.duration: true
+        sse.connection.duration: true
+      percentiles:
+        sse.heartbeat.duration: 0.5, 0.95, 0.99
+        sse.notification.duration: 0.5, 0.95, 0.99
+        sse.connection.duration: 0.5, 0.95, 0.99
