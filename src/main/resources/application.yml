@@ -25,3 +25,7 @@ aws:
   eventbridge:
     bus-name: notification_bus
     source: coubee.notification
+
+server:
+  http2:
+    enabled: false
