@@ -104,11 +104,17 @@ pipeline {
                             # 새로운 buildx 인스턴스 생성
                             docker buildx create --name multiarch-builder --driver docker-container --use
                 
+                            # Linux base 이미지 강제 pull
+                            docker pull --platform linux/amd64 amazoncorretto:17
+
                             # buildx로 빌드 (push 없이)
                             docker buildx build --platform linux/amd64 \\
                                 -f .docker/Dockerfile \\
                                 -t ${DOCKER_IMAGE_NAME} \\
                                 --output type=docker .
+                                
+                            # 테스트 실행
+                            docker run --rm ${DOCKER_IMAGE_NAME} java -version
                         """
 
                     // 플랫폼 재확인
