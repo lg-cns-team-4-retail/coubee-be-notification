@@ -5,11 +5,7 @@ def DOCKER_IMAGE_NAME
 def PROD_BUILD = false
 
 pipeline {
-    agent {
-        node {
-            label 'linux-docker-agent'
-        }
-    }
+    agent none
 
     parameters {
         gitParameter branch: '',
@@ -85,12 +81,18 @@ pipeline {
         }
 
         stage('Build & Test Application') {
+            agent {
+                label 'linux-docker-agent'
+            }
             steps {
                 sh "gradle clean build"
             }
         }
 
         stage('Build Docker Image') {
+            agent {
+                label 'docker-agent'
+            }
             steps {
                 script {
                     docker.build("${DOCKER_IMAGE_NAME}", "-f .docker/Dockerfile .")
@@ -99,6 +101,9 @@ pipeline {
         }
 
         stage('Push Docker Image') {
+            agent {
+                label 'docker-agent'
+            }
             steps {
                 script {
                     // ECR Push
