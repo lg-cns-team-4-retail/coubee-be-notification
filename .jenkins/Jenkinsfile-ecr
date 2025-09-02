@@ -7,7 +7,7 @@ def PROD_BUILD = false
 pipeline {
     agent {
         node {
-            label 'master'
+            label 'linux-docker-agent'
         }
     }
 
