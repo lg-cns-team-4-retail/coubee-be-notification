@@ -1,4 +1,4 @@
-#!/usr/bin/env groovy
+#!/usr/-bin/env groovy
 def APP_NAME
 def APP_VERSION
 def DOCKER_IMAGE_NAME
@@ -50,6 +50,10 @@ pipeline {
 
     stages {
         stage('Set Version') {
+            // --- 이 agent 블록이 추가되었습니다 ---
+            agent {
+                label 'linux-docker-agent'
+            }
             steps {
                 script {
                     APP_NAME = sh (
@@ -86,6 +90,8 @@ pipeline {
             }
             steps {
                 sh "gradle clean build"
+                // 다음 단계를 위해 빌드 결과물을 stash 합니다.
+                stash includes: 'build/libs/*.jar, .docker/Dockerfile', name: 'build_output'
             }
         }
 
@@ -94,6 +100,8 @@ pipeline {
                 label 'docker-agent'
             }
             steps {
+                // 이전 단계의 결과물을 unstash 합니다.
+                unstash 'build_output'
                 script {
                     docker.build("${DOCKER_IMAGE_NAME}", "-f .docker/Dockerfile .")
                 }
