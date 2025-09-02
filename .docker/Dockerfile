@@ -1,5 +1,4 @@
-FROM ubuntu:22.04
-RUN apt-get update && apt-get install -y openjdk-17-jre-headless
+FROM amazoncorretto:17
 MAINTAINER hoobastank0807@gmail.com
 VOLUME /tmp
 EXPOSE 8080

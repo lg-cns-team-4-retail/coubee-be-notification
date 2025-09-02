@@ -93,29 +93,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    // 기존 이미지 완전 삭제
-                    sh "docker rmi ${DOCKER_IMAGE_NAME} || true"
-                    sh "docker system prune -f"
-
-                    sh """
-                            # 기존 buildx 인스턴스 제거
-                            docker buildx rm multiarch-builder || true
-                
-                            # 새로운 buildx 인스턴스 생성
-                            docker buildx create --name multiarch-builder --driver docker-container --use
-                
-                            # Linux base 이미지 강제 pull
-                            docker pull --platform linux/amd64 amazoncorretto:17
-
-                            # buildx로 빌드 (push 없이)
-                            docker buildx build --platform linux/amd64 \\
-                                -f .docker/Dockerfile \\
-                                -t ${DOCKER_IMAGE_NAME} \\
-                                --output type=docker .
-                        """
-
-                    // 플랫폼 재확인
-                    sh "docker inspect ${DOCKER_IMAGE_NAME} --format='{{.Os}}/{{.Architecture}}'"
+                    docker.build("${DOCKER_IMAGE_NAME}", "--platform linux/arm64 -f .docker/Dockerfile .")
                 }
             }
         }
