@@ -120,6 +120,21 @@ pipeline {
             }
         }
 
+        stage('Test Docker Image') {
+            steps {
+                script {
+                    sh """
+                echo "=== Testing built image ==="
+                docker run --rm ${DOCKER_IMAGE_NAME} file /usr/bin/java
+                docker run --rm ${DOCKER_IMAGE_NAME} uname -a  
+                docker run --rm ${DOCKER_IMAGE_NAME} java -version
+                echo "=== Testing JAR file ==="
+                docker run --rm ${DOCKER_IMAGE_NAME} file /app.jar
+            """
+                }
+            }
+        }
+
         stage('Push Docker Image') {
             steps {
                 script {
