@@ -1,4 +1,4 @@
-FROM amazoncorretto:17
+FROM --platform=linux/amd64 amazoncorretto:17
 MAINTAINER hoobastank0807@gmail.com
 VOLUME /tmp
 EXPOSE 8080
