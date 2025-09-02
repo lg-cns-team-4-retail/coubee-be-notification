@@ -7,7 +7,7 @@ def PROD_BUILD = false
 pipeline {
     agent {
         node {
-            label 'master'
+            label 'linux-docker-agent'
         }
     }
 
@@ -90,26 +90,38 @@ pipeline {
             }
         }
 
-        stage('Build & Push Docker Image') {
+        stage('Build Docker Image') {
             steps {
                 script {
+                    docker.build("${DOCKER_IMAGE_NAME}", "-f .docker/Dockerfile .")
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    // ECR Push
                     def ECR_IMAGE = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${APP_NAME}:${APP_VERSION}"
 
                     withAWS(region: AWS_REGION, credentials: AWS_CREDENTIAL_ID) {
                         sh """
-                  echo "[INFO] Logging in to ECR..."
-                  aws ecr get-login-password --region ${AWS_REGION} \
-                    | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                          echo "[INFO] Logging in to ECR..."
+                          aws ecr get-login-password --region ${AWS_REGION} \\
+                            | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
 
-                  echo "[INFO] Building & pushing multi-platform image..."
-                  docker buildx create --use || true
-                  docker buildx build \
-                    --platform=linux/amd64 \
-                    -t ${ECR_IMAGE} \
-                    -f .docker/Dockerfile \
-                    --push .
-                """
+                          echo "[INFO] Tagging Docker image for ECR..."
+                          docker tag ${DOCKER_IMAGE_NAME} ${ECR_IMAGE}
+
+                          echo "[INFO] Pushing Docker image to ECR..."
+                          docker push ${ECR_IMAGE}
+
+                          echo "[INFO] Cleaning up local ECR image..."
+                          docker rmi ${ECR_IMAGE}
+                        """
                     }
+
+                    sh "docker rmi ${DOCKER_IMAGE_NAME}"
                 }
             }
         }
