@@ -12,11 +12,13 @@ public class OrderStatusUpdateEvent {
 
     private String eventId;
 
-    private String notificationType; // PAYED,CANCELLED_USER,CANCELLED_ADMIN,PREPARING(주문수락),PREPARED(준비완료),RECEIVED(수령완료)
+    private String notificationType; // PAID,CANCELLED_USER,CANCELLED_ADMIN,PREPARING(주문수락),PREPARED(준비완료),RECEIVED(수령완료)
 
     private String orderId;
 
     private Long userId;
+
+    private Long storeId;
 
     private String title;
 

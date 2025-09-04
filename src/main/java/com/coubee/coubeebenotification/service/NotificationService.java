@@ -183,6 +183,7 @@ public class NotificationService {
 
     public void sendOrderNotification(OrderStatusUpdateEvent eventData) {
         String userId = eventData.getUserId().toString();
+        String storeId = eventData.getStoreId().toString();
         String notificationType = eventData.getNotificationType();
         
         // 메트릭: 알림 전송 기록
@@ -195,6 +196,7 @@ public class NotificationService {
             try {
                 Map<String, Object> notificationData = Map.of(
                         "userId", userId,
+                        "storeId", storeId,
                         "messageType", notificationType,
                         "title", eventData.getTitle(),
                         "message", eventData.getMessage(),
