@@ -78,7 +78,7 @@ SseMetrics {
                 .description("Total number of failed heartbeats")
                 .register(meterRegistry);
                 
-        this.heartbeatDuration = Timer.builder("sse_heartbeat_duration")
+        this.heartbeatDuration = Timer.builder("sse.heartbeat.duration")
                 .description("Time taken to send heartbeat to all connections")
                 .register(meterRegistry);
         
@@ -95,12 +95,12 @@ SseMetrics {
                 .description("Total number of failed notifications")
                 .register(meterRegistry);
                 
-        this.notificationDuration = Timer.builder("sse_notification_duration")
+        this.notificationDuration = Timer.builder("sse.notification.duration")
                 .description("Time taken to send a notification")
                 .register(meterRegistry);
         
         // 연결 지속 시간 메트릭
-        this.connectionDuration = Timer.builder("sse_connection_duration")
+        this.connectionDuration = Timer.builder("sse.connection.duration")
                 .description("Duration of SSE connections")
                 .register(meterRegistry);
     }
