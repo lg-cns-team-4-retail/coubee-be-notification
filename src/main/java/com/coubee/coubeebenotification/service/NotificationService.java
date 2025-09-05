@@ -119,7 +119,7 @@ public class NotificationService {
             
             log.info("SSE connection created and initialized for userId: {}", userId);
             
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.error("Failed to send initial message for userId: {}", userId, e);
             sseMetrics.recordConnectionError("initialization_failed");
             emitter.completeWithError(e);
