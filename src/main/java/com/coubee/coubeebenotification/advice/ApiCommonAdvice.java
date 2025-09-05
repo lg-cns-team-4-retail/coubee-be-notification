@@ -14,7 +14,10 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
 
 @Slf4j
 @Order(value = 1)
@@ -65,9 +68,38 @@ public class ApiCommonAdvice {
         return ApiResponseDto.createError("ParameterNotValid", errorMessage, fieldList);
     }
 
+    // SSE 관련 예외는 별도 처리 (ApiResponse 반환하지 않음)
+    @ExceptionHandler({AsyncRequestNotUsableException.class})
+    public void handleAsyncRequestNotUsable(AsyncRequestNotUsableException e, HttpServletRequest request) {
+        // SSE 연결이 끊어진 경우 로그만 남기고 조용히 처리
+        if (request.getRequestURI().contains("/api/notification/subscribe")) {
+            log.debug("SSE connection closed by client: {}", e.getMessage());
+        } else {
+            log.warn("Async request not usable: {}", e.getMessage());
+        }
+        // 응답을 반환하지 않음 (이미 연결이 끊어진 상태)
+    }
+    
+    @ExceptionHandler({IOException.class})
+    public void handleIOException(IOException e, HttpServletRequest request) {
+        // Broken pipe 등 IO 에러는 클라이언트 연결 끊어짐으로 처리
+        if (request.getRequestURI().contains("/api/notification/subscribe")) {
+            log.debug("SSE IO error (client disconnect): {}", e.getMessage());
+        } else {
+            log.warn("IO error: {}", e.getMessage());
+        }
+        // 응답을 반환하지 않음
+    }
+
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     @ExceptionHandler({Exception.class})
-    public ApiResponseDto<String > handleException(Exception e) {
+    public ApiResponseDto<String> handleException(Exception e, HttpServletRequest request) {
+        // SSE 경로에서는 예외 처리하지 않음
+        if (request.getRequestURI().contains("/api/notification/subscribe")) {
+            log.error("SSE error: {}", e.getMessage(), e);
+            return null; // SSE는 ApiResponse 반환 불가
+        }
+        
         e.printStackTrace();
         return ApiResponseDto.createError(
                 "ServerError",

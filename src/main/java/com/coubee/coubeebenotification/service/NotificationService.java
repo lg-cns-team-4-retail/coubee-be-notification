@@ -10,6 +10,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -93,7 +94,8 @@ public class NotificationService {
                 padding.append(" "); // 공백으로 패딩 추가 (ALB/CloudFront 버퍼 크기 고려)
             }
             
-            emitter.send(SseEmitter.event()
+            // 안전한 전송으로 변경
+            safeSend(emitter, SseEmitter.event()
                     .name("INIT")
                     .data(Map.of(
                             "status", "connected",
@@ -103,7 +105,7 @@ public class NotificationService {
                     )));
             
             // 추가 flush 데이터 (AWS/Cloudflare 즉시 전송 보장)
-            emitter.send(SseEmitter.event()
+            safeSend(emitter, SseEmitter.event()
                     .name("FLUSH")
                     .data(" ".repeat(500))); // 500자 패딩 (AWS 버퍼 고려)
             
@@ -324,5 +326,24 @@ public class NotificationService {
      */
     public boolean hasActiveConnection(Long userId) {
         return emitterMap.containsKey(userId.toString());
+    }
+    
+    /**
+     * 안전한 SSE 전송 메서드 - 연결이 끊어진 경우 예외를 조용히 처리
+     */
+    private boolean safeSend(SseEmitter emitter, SseEmitter.SseEventBuilder event) {
+        try {
+            emitter.send(event);
+            return true;
+        } catch (AsyncRequestNotUsableException e) {
+            log.debug("SSE connection no longer usable: {}", e.getMessage());
+            return false;
+        } catch (IOException e) {
+            log.debug("SSE IO error (client disconnect): {}", e.getMessage());
+            return false;
+        } catch (Exception e) {
+            log.warn("Unexpected SSE error: {}", e.getMessage(), e);
+            return false;
+        }
     }
 }
