@@ -27,16 +27,9 @@ public class NotificationController {
         log.info("SSE connection request for userId: {}", userId);
         
         // SSE 연결을 위한 HTTP 헤더 설정
-        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        response.setHeader("Cache-Control", "no-cache");
         response.setHeader("Connection", "keep-alive");
         response.setHeader("X-Accel-Buffering", "no"); // nginx buffering 방지
-        response.setHeader("CF-Cache-Status", "DYNAMIC"); // Cloudflare 캐시 우회
-        response.setHeader("Pragma", "no-cache"); // HTTP/1.0 호환성
-        
-        // AWS ALB/CloudFront 우회 헤더
-        response.setHeader("X-ALB-Streaming", "true"); // ALB 스트리밍 힌트
-        response.setHeader("Transfer-Encoding", "chunked"); // 청크 전송
-        response.setHeader("X-CloudFront-Cache", "MISS"); // CloudFront 캐시 우회
         
         // 기존 연결이 있다면 정리하고 새 연결 생성
         if (notificationService.hasActiveConnection(userId)) {

@@ -88,26 +88,22 @@ public class NotificationService {
         SseEmitter emitter = new SseEmitter(0L); // 무한 타임아웃 (heartbeat으로 관리)
         
         try {
-            // AWS/Cloudflare 버퍼링 우회를 위한 초기 데이터 전송 (더 큰 크기)
-            StringBuilder padding = new StringBuilder();
-            for (int i = 0; i < 200; i++) {
-                padding.append(" "); // 공백으로 패딩 추가 (ALB/CloudFront 버퍼 크기 고려)
-            }
-            
-            // 안전한 전송으로 변경
+            // 연결 즉시 초기화 메시지 전송
             safeSend(emitter, SseEmitter.event()
                     .name("INIT")
                     .data(Map.of(
                             "status", "connected",
                             "userId", userIdStr,
-                            "timestamp", System.currentTimeMillis(),
-                            "padding", padding.toString() // Cloudflare 버퍼링 우회용
+                            "timestamp", System.currentTimeMillis()
                     )));
             
-            // 추가 flush 데이터 (AWS/Cloudflare 즉시 전송 보장)
+            // 즉시 heartbeat 전송 (연결 확인용)
             safeSend(emitter, SseEmitter.event()
-                    .name("FLUSH")
-                    .data(" ".repeat(500))); // 500자 패딩 (AWS 버퍼 고려)
+                    .name("HEARTBEAT")
+                    .data(Map.of(
+                            "type", "initial_heartbeat",
+                            "timestamp", System.currentTimeMillis()
+                    )));
             
             // 성공한 연결만 맵에 저장
             emitterMap.put(userIdStr, emitter);
@@ -209,22 +205,39 @@ public class NotificationService {
                         "timestamp", System.currentTimeMillis()
                 );
 
-                emitter.send(SseEmitter.event()
+                // 안전한 전송 사용
+                boolean sendSuccess = safeSend(emitter, SseEmitter.event()
                         .name("ORDER_NOTIFICATION")
                         .data(notificationData));
 
-                // 메트릭: 알림 전송 성공
-                sseMetrics.recordNotificationSuccess(notificationType);
+                if (sendSuccess) {
+                    // 메트릭: 알림 전송 성공
+                    sseMetrics.recordNotificationSuccess(notificationType);
+                    sseMetrics.stopNotificationTimer(notificationTimer);
+                    
+                    log.info("Order notification sent to userId: {}, type: {}", userId, notificationType);
+                } else {
+                    // 메트릭: 알림 전송 실패
+                    sseMetrics.recordNotificationError(notificationType, "send_failed");
+                    sseMetrics.stopNotificationTimer(notificationTimer);
+                    
+                    log.debug("Failed to send order notification to userId: {} (client disconnect)", userId);
+                    
+                    // 연결 정리
+                    Timer.Sample connectionTimer = connectionTimers.remove(userId);
+                    if (connectionTimer != null) {
+                        sseMetrics.stopConnectionTimer(connectionTimer);
+                    }
+                    emitterMap.remove(userId);
+                    sseMetrics.recordDisconnection();
+                    emitter.complete();
+                }
+            } catch (Exception e) {
+                // 예기치 못한 예외
+                sseMetrics.recordNotificationError(notificationType, "unexpected_error");
                 sseMetrics.stopNotificationTimer(notificationTimer);
                 
-                log.info("Order notification sent to userId: {}, type: {}", userId, notificationType);
-                
-            } catch (IOException e) {
-                // 메트릭: 알림 전송 실패
-                sseMetrics.recordNotificationError(notificationType, "send_failed");
-                sseMetrics.stopNotificationTimer(notificationTimer);
-                
-                log.error("Failed to send order notification to userId: {}", userId, e);
+                log.error("Unexpected error sending order notification to userId: {}", userId, e);
                 
                 // 연결 정리
                 Timer.Sample connectionTimer = connectionTimers.remove(userId);
@@ -265,23 +278,23 @@ public class NotificationService {
             String userId = entry.getKey();
             SseEmitter emitter = entry.getValue();
             
-            try {
-                sseMetrics.recordHeartbeatSent();
-                
-                emitter.send(SseEmitter.event()
-                        .name("HEARTBEAT")
-                        .data(Map.of(
-                                "type", "heartbeat",
-                                "timestamp", System.currentTimeMillis()
-                        )));
-                
+            sseMetrics.recordHeartbeatSent();
+            
+            // 안전한 전송 사용
+            boolean sendSuccess = safeSend(emitter, SseEmitter.event()
+                    .name("HEARTBEAT")
+                    .data(Map.of(
+                            "type", "heartbeat",
+                            "timestamp", System.currentTimeMillis()
+                    )));
+            
+            if (sendSuccess) {
                 sseMetrics.recordHeartbeatSuccess();
                 successCount++;
                 log.trace("Heartbeat sent to userId: {}", userId);
-                
-            } catch (IOException e) {
+            } else {
                 sseMetrics.recordHeartbeatFailure();
-                log.warn("Failed to send heartbeat to userId: {}, connection will be removed", userId, e);
+                log.debug("Failed to send heartbeat to userId: {}, connection will be removed", userId);
                 failedConnections.add(userId);
             }
         }
