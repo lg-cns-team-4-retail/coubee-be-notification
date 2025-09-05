@@ -87,22 +87,17 @@ public class NotificationService {
         SseEmitter emitter = new SseEmitter(0L); // 무한 타임아웃 (heartbeat으로 관리)
         
         try {
-            // 연결 즉시 초기화 메시지 전송
+            // 연결 즉시 단일 초기화 메시지 전송 (pending 시간 단축)
             emitter.send(SseEmitter.event()
-                    .name("INIT")
+                    .name("CONNECTED")
                     .data(Map.of(
-                            "message", "SSE 연결됨",
+                            "status", "connected",
                             "userId", userIdStr,
                             "timestamp", System.currentTimeMillis()
                     )));
             
-            // 추가로 즉시 heartbeat 전송 (연결 확인용)
-            emitter.send(SseEmitter.event()
-                    .name("HEARTBEAT")
-                    .data(Map.of(
-                            "type", "initial_heartbeat",
-                            "timestamp", System.currentTimeMillis()
-                    )));
+            // 즉시 flush 수행하여 pending 상태 해제
+            emitter.send(SseEmitter.event().data(""));
             
             // 성공한 연결만 맵에 저장
             emitterMap.put(userIdStr, emitter);
