@@ -94,7 +94,7 @@ public class NotificationService {
             }
             
             emitter.send(SseEmitter.event()
-                    .name("CONNECTED")
+                    .name("INIT")
                     .data(Map.of(
                             "status", "connected",
                             "userId", userIdStr,
