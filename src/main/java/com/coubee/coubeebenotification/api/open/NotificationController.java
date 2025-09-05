@@ -27,9 +27,11 @@ public class NotificationController {
         log.info("SSE connection request for userId: {}", userId);
         
         // SSE 연결을 위한 HTTP 헤더 설정
-        response.setHeader("Cache-Control", "no-cache");
+        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         response.setHeader("Connection", "keep-alive");
         response.setHeader("X-Accel-Buffering", "no"); // nginx buffering 방지
+        response.setHeader("CF-Cache-Status", "DYNAMIC"); // Cloudflare 캐시 우회
+        response.setHeader("Pragma", "no-cache"); // HTTP/1.0 호환성
         
         // 기존 연결이 있다면 정리하고 새 연결 생성
         if (notificationService.hasActiveConnection(userId)) {

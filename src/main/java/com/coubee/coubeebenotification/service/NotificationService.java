@@ -87,17 +87,25 @@ public class NotificationService {
         SseEmitter emitter = new SseEmitter(0L); // 무한 타임아웃 (heartbeat으로 관리)
         
         try {
-            // 연결 즉시 단일 초기화 메시지 전송 (pending 시간 단축)
+            // Cloudflare 버퍼링 우회를 위한 초기 데이터 전송
+            StringBuilder padding = new StringBuilder();
+            for (int i = 0; i < 50; i++) {
+                padding.append(" "); // 공백으로 패딩 추가
+            }
+            
             emitter.send(SseEmitter.event()
                     .name("CONNECTED")
                     .data(Map.of(
                             "status", "connected",
                             "userId", userIdStr,
-                            "timestamp", System.currentTimeMillis()
+                            "timestamp", System.currentTimeMillis(),
+                            "padding", padding.toString() // Cloudflare 버퍼링 우회용
                     )));
             
-            // 즉시 flush 수행하여 pending 상태 해제
-            emitter.send(SseEmitter.event().data(""));
+            // 추가 flush 데이터 (Cloudflare 즉시 전송 보장)
+            emitter.send(SseEmitter.event()
+                    .name("FLUSH")
+                    .data(" ".repeat(100))); // 100자 패딩
             
             // 성공한 연결만 맵에 저장
             emitterMap.put(userIdStr, emitter);
