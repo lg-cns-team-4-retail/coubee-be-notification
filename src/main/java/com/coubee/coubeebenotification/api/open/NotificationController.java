@@ -33,6 +33,11 @@ public class NotificationController {
         response.setHeader("CF-Cache-Status", "DYNAMIC"); // Cloudflare 캐시 우회
         response.setHeader("Pragma", "no-cache"); // HTTP/1.0 호환성
         
+        // AWS ALB/CloudFront 우회 헤더
+        response.setHeader("X-ALB-Streaming", "true"); // ALB 스트리밍 힌트
+        response.setHeader("Transfer-Encoding", "chunked"); // 청크 전송
+        response.setHeader("X-CloudFront-Cache", "MISS"); // CloudFront 캐시 우회
+        
         // 기존 연결이 있다면 정리하고 새 연결 생성
         if (notificationService.hasActiveConnection(userId)) {
             log.info("Replacing existing SSE connection for userId: {}", userId);

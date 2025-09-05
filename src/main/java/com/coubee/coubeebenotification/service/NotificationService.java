@@ -87,10 +87,10 @@ public class NotificationService {
         SseEmitter emitter = new SseEmitter(0L); // 무한 타임아웃 (heartbeat으로 관리)
         
         try {
-            // Cloudflare 버퍼링 우회를 위한 초기 데이터 전송
+            // AWS/Cloudflare 버퍼링 우회를 위한 초기 데이터 전송 (더 큰 크기)
             StringBuilder padding = new StringBuilder();
-            for (int i = 0; i < 50; i++) {
-                padding.append(" "); // 공백으로 패딩 추가
+            for (int i = 0; i < 200; i++) {
+                padding.append(" "); // 공백으로 패딩 추가 (ALB/CloudFront 버퍼 크기 고려)
             }
             
             emitter.send(SseEmitter.event()
@@ -102,10 +102,10 @@ public class NotificationService {
                             "padding", padding.toString() // Cloudflare 버퍼링 우회용
                     )));
             
-            // 추가 flush 데이터 (Cloudflare 즉시 전송 보장)
+            // 추가 flush 데이터 (AWS/Cloudflare 즉시 전송 보장)
             emitter.send(SseEmitter.event()
                     .name("FLUSH")
-                    .data(" ".repeat(100))); // 100자 패딩
+                    .data(" ".repeat(500))); // 500자 패딩 (AWS 버퍼 고려)
             
             // 성공한 연결만 맵에 저장
             emitterMap.put(userIdStr, emitter);
