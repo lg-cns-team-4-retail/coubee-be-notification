@@ -40,6 +40,13 @@ public class NotificationController {
         response.setHeader("CF-Cache-Status", "BYPASS");
         response.setHeader("Cache-Status", "BYPASS");
         
+        // 즉시 응답 플러시
+        try {
+            response.flushBuffer();
+        } catch (Exception e) {
+            log.warn("Failed to flush response buffer", e);
+        }
+        
         // 기존 연결이 있다면 정리하고 새 연결 생성
         if (notificationService.hasActiveConnection(userId, storeId)) {
             log.info("Replacing existing SSE connection for userId: {}, storeId: {}", userId, storeId);

@@ -69,8 +69,17 @@ public class NotificationService {
         SseEmitter emitter = new SseEmitter(0L); // 무한 타임아웃 (heartbeat으로 관리)
         
         try {
-            // 연결 즉시 초기화 메시지 전송
-            safeSend(emitter, SseEmitter.event()
+            // 성공한 연결만 맵에 저장 (먼저 저장)
+            connectionEmitters.computeIfAbsent(connectionKey, k -> ConcurrentHashMap.newKeySet()).add(emitter);
+            emitterToConnectionKey.put(emitter, connectionKey);
+            
+            // 메트릭: 연결 성공 및 타이머 시작
+            sseMetrics.recordConnectionSuccess();
+            Timer.Sample connectionTimer = sseMetrics.startConnectionTimer();
+            connectionTimers.put(emitter, connectionTimer);
+            
+            // 연결 즉시 초기화 메시지 전송 (SSE 표준 형식)
+            emitter.send(SseEmitter.event()
                     .name("INIT")
                     .data(Map.of(
                             "status", "connected",
@@ -80,21 +89,12 @@ public class NotificationService {
                     )));
             
             // 즉시 heartbeat 전송 (연결 확인용)
-            safeSend(emitter, SseEmitter.event()
+            emitter.send(SseEmitter.event()
                     .name("HEARTBEAT")
                     .data(Map.of(
                             "type", "initial_heartbeat",
                             "timestamp", System.currentTimeMillis()
                     )));
-            
-            // 성공한 연결만 맵에 저장
-            connectionEmitters.computeIfAbsent(connectionKey, k -> ConcurrentHashMap.newKeySet()).add(emitter);
-            emitterToConnectionKey.put(emitter, connectionKey);
-            
-            // 메트릭: 연결 성공 및 타이머 시작
-            sseMetrics.recordConnectionSuccess();
-            Timer.Sample connectionTimer = sseMetrics.startConnectionTimer();
-            connectionTimers.put(emitter, connectionTimer);
             
             log.info("SSE connection created and initialized for userId: {}, storeId: {}", userId, storeId);
             
