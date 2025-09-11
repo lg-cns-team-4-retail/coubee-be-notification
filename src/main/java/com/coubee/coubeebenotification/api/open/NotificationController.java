@@ -21,16 +21,24 @@ public class NotificationController {
     private final NotificationService notificationService;
 
     @GetMapping(value = "/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribe(@RequestHeader(value = "X-Store-Id", required = false) Long storeId, 
+    public SseEmitter subscribe(@RequestHeader(value = "X-Store-Id", required = false) String storeIdHeader, 
                                HttpServletResponse response) {
-        Long userId = GatewayRequestHeaderUtils.getUserIdOrThrowException();
-        
-        // storeId가 없으면 기본값 사용
-        if (storeId == null) {
-            storeId = 1L;
-        }
-        
-        log.info("SSE connection request for userId: {}, storeId: {} (from header)", userId, storeId);
+        try {
+            Long userId = GatewayRequestHeaderUtils.getUserIdOrThrowException();
+            log.info("Got userId: {}, storeId header: '{}'", userId, storeIdHeader);
+            
+            // storeId가 없거나 빈 문자열이면 기본값 사용
+            Long storeId = 1L;
+            if (storeIdHeader != null && !storeIdHeader.trim().isEmpty()) {
+                try {
+                    storeId = Long.parseLong(storeIdHeader.trim());
+                    log.info("Parsed storeId: {}", storeId);
+                } catch (NumberFormatException e) {
+                    log.warn("Invalid storeId header '{}', using default: {}", storeIdHeader, storeId);
+                }
+            }
+            
+            log.info("SSE connection request for userId: {}, storeId: {} (from header)", userId, storeId);
         
         // SSE 연결을 위한 HTTP 헤더 설정
         response.setHeader("Cache-Control", "no-cache");
@@ -42,17 +50,37 @@ public class NotificationController {
             log.info("Replacing existing SSE connection for userId: {}, storeId: {}", userId, storeId);
         }
         
-        SseEmitter emitter = notificationService.createConnection(userId, storeId);
-        
-        log.info("SSE connection established for userId: {}, storeId: {}", userId, storeId);
-        return emitter;
+            SseEmitter emitter = notificationService.createConnection(userId, storeId);
+            
+            log.info("SSE connection established for userId: {}, storeId: {}", userId, storeId);
+            return emitter;
+            
+        } catch (Exception e) {
+            log.error("Error creating SSE connection", e);
+            // 500 에러 대신 빈 emitter 반환
+            SseEmitter errorEmitter = new SseEmitter(5000L);
+            try {
+                errorEmitter.send(SseEmitter.event()
+                        .name("error")
+                        .data("Connection failed: " + e.getMessage()));
+                errorEmitter.complete();
+            } catch (Exception sendError) {
+                log.error("Failed to send error message", sendError);
+            }
+            return errorEmitter;
+        }
     }
 
     @GetMapping(value = "/status/{userId}")
     public Map<String, Object> getConnectionStatus(@PathVariable Long userId, 
-                                                  @RequestHeader(value = "X-Store-Id", required = false) Long storeId) {
-        if (storeId == null) {
-            storeId = 1L;
+                                                  @RequestHeader(value = "X-Store-Id", required = false) String storeIdHeader) {
+        Long storeId = 1L;
+        if (storeIdHeader != null && !storeIdHeader.trim().isEmpty()) {
+            try {
+                storeId = Long.parseLong(storeIdHeader.trim());
+            } catch (NumberFormatException e) {
+                log.warn("Invalid storeId header '{}', using default: {}", storeIdHeader, storeId);
+            }
         }
         boolean hasConnection = notificationService.hasActiveConnection(userId, storeId);
         int totalConnections = notificationService.getActiveConnectionCount();
