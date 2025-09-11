@@ -22,9 +22,14 @@ public class NotificationController {
 
     @GetMapping(value = "/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter subscribe(@RequestParam Long storeId, HttpServletResponse response) {
-        Long userId = GatewayRequestHeaderUtils.getUserIdOrThrowException();
-
-        log.info("SSE connection request for userId: {}, storeId: {}", userId, storeId);
+        Long userId;
+        try {
+            userId = GatewayRequestHeaderUtils.getUserIdOrThrowException();
+            log.info("SSE connection request for userId: {}, storeId: {}", userId, storeId);
+        } catch (Exception e) {
+            log.error("Failed to get userId from headers", e);
+            throw e;
+        }
         
         // SSE 연결을 위한 HTTP 헤더 설정 (Cloudflare 호환성 포함)
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -40,22 +45,21 @@ public class NotificationController {
         response.setHeader("CF-Cache-Status", "BYPASS");
         response.setHeader("Cache-Status", "BYPASS");
         
-        // 즉시 응답 플러시
-        try {
-            response.flushBuffer();
-        } catch (Exception e) {
-            log.warn("Failed to flush response buffer", e);
-        }
+        log.info("Headers set for SSE connection userId: {}, storeId: {}", userId, storeId);
         
         // 기존 연결이 있다면 정리하고 새 연결 생성
         if (notificationService.hasActiveConnection(userId, storeId)) {
             log.info("Replacing existing SSE connection for userId: {}, storeId: {}", userId, storeId);
         }
         
-        SseEmitter emitter = notificationService.createConnection(userId, storeId);
-        
-        log.info("SSE connection established for userId: {}, storeId: {}", userId, storeId);
-        return emitter;
+        try {
+            SseEmitter emitter = notificationService.createConnection(userId, storeId);
+            log.info("SSE connection established for userId: {}, storeId: {}", userId, storeId);
+            return emitter;
+        } catch (Exception e) {
+            log.error("Failed to create SSE connection for userId: {}, storeId: {}", userId, storeId, e);
+            throw e;
+        }
     }
 
     @GetMapping(value = "/status/{userId}")
