@@ -26,10 +26,19 @@ public class NotificationController {
 
         log.info("SSE connection request for userId: {}, storeId: {}", userId, storeId);
         
-        // SSE 연결을 위한 HTTP 헤더 설정
-        response.setHeader("Cache-Control", "no-cache");
+        // SSE 연결을 위한 HTTP 헤더 설정 (Cloudflare 호환성 포함)
+        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        response.setHeader("Pragma", "no-cache");
+        response.setHeader("Expires", "0");
         response.setHeader("Connection", "keep-alive");
         response.setHeader("X-Accel-Buffering", "no"); // nginx buffering 방지
+        response.setHeader("Access-Control-Allow-Origin", "*");
+        response.setHeader("Access-Control-Allow-Headers", "Cache-Control");
+        response.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+        
+        // Cloudflare specific headers
+        response.setHeader("CF-Cache-Status", "BYPASS");
+        response.setHeader("Cache-Status", "BYPASS");
         
         // 기존 연결이 있다면 정리하고 새 연결 생성
         if (notificationService.hasActiveConnection(userId, storeId)) {
