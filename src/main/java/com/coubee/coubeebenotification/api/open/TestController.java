@@ -11,7 +11,7 @@ import java.util.Map;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/test")
+@RequestMapping("/api/notification/test")
 public class TestController {
 
     @GetMapping(value = "/simple-sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
