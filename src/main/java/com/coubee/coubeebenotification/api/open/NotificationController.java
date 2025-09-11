@@ -21,49 +21,37 @@ public class NotificationController {
     private final NotificationService notificationService;
 
     @GetMapping(value = "/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribe(@RequestParam Long storeId, HttpServletResponse response) {
-        Long userId;
-        try {
-            userId = GatewayRequestHeaderUtils.getUserIdOrThrowException();
-            log.info("SSE connection request for userId: {}, storeId: {}", userId, storeId);
-        } catch (Exception e) {
-            log.error("Failed to get userId from headers", e);
-            throw e;
+    public SseEmitter subscribe(@RequestParam(required = false) Long storeId, HttpServletResponse response) {
+        Long userId = GatewayRequestHeaderUtils.getUserIdOrThrowException();
+        
+        // storeId가 없으면 기본값 사용
+        if (storeId == null) {
+            storeId = 1L;
         }
         
-        // SSE 연결을 위한 HTTP 헤더 설정 (Cloudflare 호환성 포함)
-        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-        response.setHeader("Pragma", "no-cache");
-        response.setHeader("Expires", "0");
+        log.info("SSE connection request for userId: {}, storeId: {}", userId, storeId);
+        
+        // SSE 연결을 위한 HTTP 헤더 설정
+        response.setHeader("Cache-Control", "no-cache");
         response.setHeader("Connection", "keep-alive");
         response.setHeader("X-Accel-Buffering", "no"); // nginx buffering 방지
-        response.setHeader("Access-Control-Allow-Origin", "*");
-        response.setHeader("Access-Control-Allow-Headers", "Cache-Control");
-        response.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-        
-        // Cloudflare specific headers
-        response.setHeader("CF-Cache-Status", "BYPASS");
-        response.setHeader("Cache-Status", "BYPASS");
-        
-        log.info("Headers set for SSE connection userId: {}, storeId: {}", userId, storeId);
         
         // 기존 연결이 있다면 정리하고 새 연결 생성
         if (notificationService.hasActiveConnection(userId, storeId)) {
             log.info("Replacing existing SSE connection for userId: {}, storeId: {}", userId, storeId);
         }
         
-        try {
-            SseEmitter emitter = notificationService.createConnection(userId, storeId);
-            log.info("SSE connection established for userId: {}, storeId: {}", userId, storeId);
-            return emitter;
-        } catch (Exception e) {
-            log.error("Failed to create SSE connection for userId: {}, storeId: {}", userId, storeId, e);
-            throw e;
-        }
+        SseEmitter emitter = notificationService.createConnection(userId, storeId);
+        
+        log.info("SSE connection established for userId: {}, storeId: {}", userId, storeId);
+        return emitter;
     }
 
     @GetMapping(value = "/status/{userId}")
-    public Map<String, Object> getConnectionStatus(@PathVariable Long userId, @RequestParam Long storeId) {
+    public Map<String, Object> getConnectionStatus(@PathVariable Long userId, @RequestParam(required = false) Long storeId) {
+        if (storeId == null) {
+            storeId = 1L;
+        }
         boolean hasConnection = notificationService.hasActiveConnection(userId, storeId);
         int totalConnections = notificationService.getActiveConnectionCount();
         

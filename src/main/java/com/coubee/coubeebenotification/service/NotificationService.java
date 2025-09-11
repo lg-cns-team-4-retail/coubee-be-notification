@@ -66,7 +66,7 @@ public class NotificationService {
         // 메트릭: 연결 시도 기록
         sseMetrics.recordConnectionAttempt();
         
-        SseEmitter emitter = new SseEmitter(0L); // 무한 타임아웃 (heartbeat으로 관리)
+        SseEmitter emitter = new SseEmitter(300000L); // 5분 타임아웃
         
         try {
             // 성공한 연결만 맵에 저장 (먼저 저장)
