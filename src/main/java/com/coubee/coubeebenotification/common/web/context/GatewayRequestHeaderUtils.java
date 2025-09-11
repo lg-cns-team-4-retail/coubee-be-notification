@@ -69,9 +69,9 @@ public class GatewayRequestHeaderUtils {
         return clientAddress;
     }
 
-    public static Long getStoreIdOrThrowException() {
-        Long storeId = Long.parseLong(getStoreId());
-        if (storeId == null) {
+    public static String getStoreIdOrThrowException() {
+        String storeId = getStoreId();
+        if (storeId == null || storeId.trim().isEmpty()) {
             throw new NotFound("헤더에 매장 아이디 정보가 없습니다.");
         }
 

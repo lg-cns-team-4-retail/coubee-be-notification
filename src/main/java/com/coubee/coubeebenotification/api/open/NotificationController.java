@@ -24,10 +24,16 @@ public class NotificationController {
     public SseEmitter subscribe(HttpServletResponse response) {
         try {
             Long userId = GatewayRequestHeaderUtils.getUserIdOrThrowException();
-            Long storeId = GatewayRequestHeaderUtils.getStoreIdOrThrowException();
-            log.info("Got userId: {}, storeId header: '{}'", userId, storeId);
+            String storeIdHeader = GatewayRequestHeaderUtils.getStoreIdOrThrowException();
+            log.info("Got userId: {}, storeId header: '{}'", userId, storeIdHeader);
 
-            
+            Long storeId;
+            try {
+                storeId = Long.parseLong(storeIdHeader.trim());
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Invalid X-Store-Id header: " + storeIdHeader);
+            }
+
             log.info("SSE connection request for userId: {}, storeId: {} (from header)", userId, storeId);
         
         // SSE 연결을 위한 HTTP 헤더 설정
