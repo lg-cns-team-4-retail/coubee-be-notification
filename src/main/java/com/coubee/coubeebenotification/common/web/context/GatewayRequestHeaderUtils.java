@@ -33,6 +33,10 @@ public class GatewayRequestHeaderUtils {
         return getRequestHeaderParamAsString("X-Client-Address");
     }
 
+    public static String getStoreId() {
+        return getRequestHeaderParamAsString("X-Store-Id");
+    }
+
     public static String getUsernameOrThrowException() {
         String username = getUserName();
         if (username == null) {
@@ -63,5 +67,14 @@ public class GatewayRequestHeaderUtils {
         }
 
         return clientAddress;
+    }
+
+    public static Long getStoreIdOrThrowException() {
+        Long storeId = Long.parseLong(getStoreId());
+        if (storeId == null) {
+            throw new NotFound("헤더에 매장 아이디 정보가 없습니다.");
+        }
+
+        return storeId;
     }
 }

@@ -21,22 +21,12 @@ public class NotificationController {
     private final NotificationService notificationService;
 
     @GetMapping(value = "/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribe(@RequestHeader(value = "X-Store-Id", required = false) String storeIdHeader, 
-                               HttpServletResponse response) {
+    public SseEmitter subscribe(HttpServletResponse response) {
         try {
             Long userId = GatewayRequestHeaderUtils.getUserIdOrThrowException();
-            log.info("Got userId: {}, storeId header: '{}'", userId, storeIdHeader);
-            
-            // storeId가 없거나 빈 문자열이면 기본값 사용
-            Long storeId = 1L;
-            if (storeIdHeader != null && !storeIdHeader.trim().isEmpty()) {
-                try {
-                    storeId = Long.parseLong(storeIdHeader.trim());
-                    log.info("Parsed storeId: {}", storeId);
-                } catch (NumberFormatException e) {
-                    log.warn("Invalid storeId header '{}', using default: {}", storeIdHeader, storeId);
-                }
-            }
+            Long storeId = GatewayRequestHeaderUtils.getStoreIdOrThrowException();
+            log.info("Got userId: {}, storeId header: '{}'", userId, storeId);
+
             
             log.info("SSE connection request for userId: {}, storeId: {} (from header)", userId, storeId);
         
@@ -74,13 +64,15 @@ public class NotificationController {
     @GetMapping(value = "/status/{userId}")
     public Map<String, Object> getConnectionStatus(@PathVariable Long userId, 
                                                   @RequestHeader(value = "X-Store-Id", required = false) String storeIdHeader) {
-        Long storeId = 1L;
-        if (storeIdHeader != null && !storeIdHeader.trim().isEmpty()) {
-            try {
-                storeId = Long.parseLong(storeIdHeader.trim());
-            } catch (NumberFormatException e) {
-                log.warn("Invalid storeId header '{}', using default: {}", storeIdHeader, storeId);
-            }
+        if (storeIdHeader == null || storeIdHeader.trim().isEmpty()) {
+            throw new IllegalArgumentException("X-Store-Id header is required");
+        }
+        
+        Long storeId;
+        try {
+            storeId = Long.parseLong(storeIdHeader.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid X-Store-Id header: " + storeIdHeader);
         }
         boolean hasConnection = notificationService.hasActiveConnection(userId, storeId);
         int totalConnections = notificationService.getActiveConnectionCount();
