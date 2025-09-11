@@ -21,10 +21,10 @@ public class NotificationController {
     private final NotificationService notificationService;
 
     @GetMapping(value = "/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribe(HttpServletResponse response) {
+    public SseEmitter subscribe(@RequestParam Long storeId, HttpServletResponse response) {
         Long userId = GatewayRequestHeaderUtils.getUserIdOrThrowException();
 
-        log.info("SSE connection request for userId: {}", userId);
+        log.info("SSE connection request for userId: {}, storeId: {}", userId, storeId);
         
         // SSE 연결을 위한 HTTP 헤더 설정
         response.setHeader("Cache-Control", "no-cache");
@@ -32,23 +32,24 @@ public class NotificationController {
         response.setHeader("X-Accel-Buffering", "no"); // nginx buffering 방지
         
         // 기존 연결이 있다면 정리하고 새 연결 생성
-        if (notificationService.hasActiveConnection(userId)) {
-            log.info("Replacing existing SSE connection for userId: {}", userId);
+        if (notificationService.hasActiveConnection(userId, storeId)) {
+            log.info("Replacing existing SSE connection for userId: {}, storeId: {}", userId, storeId);
         }
         
-        SseEmitter emitter = notificationService.createConnection(userId);
+        SseEmitter emitter = notificationService.createConnection(userId, storeId);
         
-        log.info("SSE connection established for userId: {}", userId);
+        log.info("SSE connection established for userId: {}, storeId: {}", userId, storeId);
         return emitter;
     }
 
     @GetMapping(value = "/status/{userId}")
-    public Map<String, Object> getConnectionStatus(@PathVariable Long userId) {
-        boolean hasConnection = notificationService.hasActiveConnection(userId);
+    public Map<String, Object> getConnectionStatus(@PathVariable Long userId, @RequestParam Long storeId) {
+        boolean hasConnection = notificationService.hasActiveConnection(userId, storeId);
         int totalConnections = notificationService.getActiveConnectionCount();
         
         return Map.of(
                 "userId", userId,
+                "storeId", storeId,
                 "hasActiveConnection", hasConnection,
                 "totalActiveConnections", totalConnections,
                 "timestamp", System.currentTimeMillis()

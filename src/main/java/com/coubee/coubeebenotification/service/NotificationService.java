@@ -13,6 +13,8 @@ import jakarta.annotation.PreDestroy;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import java.io.IOException;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -23,8 +25,9 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class NotificationService {
     private final SseMetrics sseMetrics;
-    private final Map<String, SseEmitter> emitterMap = new ConcurrentHashMap<>();
-    private final Map<String, Timer.Sample> connectionTimers = new ConcurrentHashMap<>();
+    private final Map<String, Set<SseEmitter>> connectionEmitters = new ConcurrentHashMap<>();
+    private final Map<SseEmitter, String> emitterToConnectionKey = new ConcurrentHashMap<>();
+    private final Map<SseEmitter, Timer.Sample> connectionTimers = new ConcurrentHashMap<>();
     private ScheduledExecutorService heartbeatScheduler;
 
     @PostConstruct
@@ -57,33 +60,11 @@ public class NotificationService {
         }
     }
 
-    public SseEmitter createConnection(Long userId) {
-        String userIdStr = userId.toString();
+    public SseEmitter createConnection(Long userId, Long storeId) {
+        String connectionKey = createConnectionKey(userId, storeId);
         
         // 메트릭: 연결 시도 기록
         sseMetrics.recordConnectionAttempt();
-        
-        // 기존 연결이 있다면 정리
-        SseEmitter existingEmitter = emitterMap.get(userIdStr);
-        if (existingEmitter != null) {
-            try {
-                existingEmitter.send(SseEmitter.event()
-                        .name("CONNECTION_REPLACED")
-                        .data("새로운 연결로 교체됩니다"));
-                existingEmitter.complete();
-            } catch (IOException e) {
-                log.debug("Failed to send replacement notice to existing connection for userId: {}", userId, e);
-            }
-            
-            // 기존 연결 정리
-            Timer.Sample oldTimer = connectionTimers.remove(userIdStr);
-            if (oldTimer != null) {
-                sseMetrics.stopConnectionTimer(oldTimer);
-            }
-            emitterMap.remove(userIdStr);
-            sseMetrics.recordDisconnection();
-            log.info("Removed existing SSE connection for userId: {}", userId);
-        }
         
         SseEmitter emitter = new SseEmitter(0L); // 무한 타임아웃 (heartbeat으로 관리)
         
@@ -93,7 +74,8 @@ public class NotificationService {
                     .name("INIT")
                     .data(Map.of(
                             "status", "connected",
-                            "userId", userIdStr,
+                            "userId", userId.toString(),
+                            "storeId", storeId.toString(),
                             "timestamp", System.currentTimeMillis()
                     )));
             
@@ -106,53 +88,62 @@ public class NotificationService {
                     )));
             
             // 성공한 연결만 맵에 저장
-            emitterMap.put(userIdStr, emitter);
+            connectionEmitters.computeIfAbsent(connectionKey, k -> ConcurrentHashMap.newKeySet()).add(emitter);
+            emitterToConnectionKey.put(emitter, connectionKey);
             
             // 메트릭: 연결 성공 및 타이머 시작
             sseMetrics.recordConnectionSuccess();
             Timer.Sample connectionTimer = sseMetrics.startConnectionTimer();
-            connectionTimers.put(userIdStr, connectionTimer);
+            connectionTimers.put(emitter, connectionTimer);
             
-            log.info("SSE connection created and initialized for userId: {}", userId);
+            log.info("SSE connection created and initialized for userId: {}, storeId: {}", userId, storeId);
             
         } catch (Exception e) {
-            log.error("Failed to send initial message for userId: {}", userId, e);
+            log.error("Failed to send initial message for userId: {}, storeId: {}", userId, storeId, e);
             sseMetrics.recordConnectionError("initialization_failed");
             emitter.completeWithError(e);
             return emitter;
         }
 
         emitter.onCompletion(() -> {
-            emitterMap.remove(userId.toString());
-            Timer.Sample timer = connectionTimers.remove(userId.toString());
-            if (timer != null) {
-                sseMetrics.stopConnectionTimer(timer);
-            }
-            sseMetrics.recordDisconnection();
-            log.info("SSE connection completed for userId: {}", userId);
+            removeEmitter(emitter);
+            log.info("SSE connection completed for userId: {}, storeId: {}", userId, storeId);
         });
         
         emitter.onTimeout(() -> {
-            emitterMap.remove(userId.toString());
-            Timer.Sample timer = connectionTimers.remove(userId.toString());
-            if (timer != null) {
-                sseMetrics.stopConnectionTimer(timer);
-            }
-            sseMetrics.recordDisconnection();
-            log.info("SSE connection timeout for userId: {}", userId);
+            removeEmitter(emitter);
+            log.info("SSE connection timeout for userId: {}, storeId: {}", userId, storeId);
         });
         
         emitter.onError((throwable) -> {
-            emitterMap.remove(userId.toString());
-            Timer.Sample timer = connectionTimers.remove(userId.toString());
-            if (timer != null) {
-                sseMetrics.stopConnectionTimer(timer);
-            }
-            sseMetrics.recordDisconnection();
-            log.error("SSE connection error for userId: {}", userId, throwable);
+            removeEmitter(emitter);
+            log.error("SSE connection error for userId: {}, storeId: {}", userId, storeId, throwable);
         });
 
         return emitter;
+    }
+    
+    private String createConnectionKey(Long userId, Long storeId) {
+        return userId + ":" + storeId;
+    }
+    
+    private void removeEmitter(SseEmitter emitter) {
+        String connectionKey = emitterToConnectionKey.remove(emitter);
+        if (connectionKey != null) {
+            Set<SseEmitter> emitters = connectionEmitters.get(connectionKey);
+            if (emitters != null) {
+                emitters.remove(emitter);
+                if (emitters.isEmpty()) {
+                    connectionEmitters.remove(connectionKey);
+                }
+            }
+        }
+        
+        Timer.Sample timer = connectionTimers.remove(emitter);
+        if (timer != null) {
+            sseMetrics.stopConnectionTimer(timer);
+        }
+        sseMetrics.recordDisconnection();
     }
 
 //    public void sendNotification(Long userId, String messageType, String title, String message) {
@@ -191,62 +182,54 @@ public class NotificationService {
         sseMetrics.recordNotificationSent(notificationType);
         Timer.Sample notificationTimer = sseMetrics.startNotificationTimer();
         
-        SseEmitter emitter = emitterMap.get(userId);
+        // userId와 storeId를 기반으로 대상 연결들 찾기
+        String targetConnectionKey = createConnectionKey(eventData.getUserId(), eventData.getStoreId());
+        Set<SseEmitter> emitters = connectionEmitters.get(targetConnectionKey);
         
-        if (emitter != null) {
-            try {
-                Map<String, Object> notificationData = Map.of(
-                        "userId", userId,
-                        "storeId", storeId,
-                        "messageType", notificationType,
-                        "title", eventData.getTitle(),
-                        "message", eventData.getMessage(),
-                        "messageData", eventData,
-                        "timestamp", System.currentTimeMillis()
-                );
-
+        if (emitters != null && !emitters.isEmpty()) {
+            Map<String, Object> notificationData = Map.of(
+                    "userId", userId,
+                    "storeId", storeId,
+                    "messageType", notificationType,
+                    "title", eventData.getTitle(),
+                    "message", eventData.getMessage(),
+                    "messageData", eventData,
+                    "timestamp", System.currentTimeMillis()
+            );
+            
+            // 실패한 연결들을 수집할 리스트
+            java.util.List<SseEmitter> failedEmitters = new java.util.ArrayList<>();
+            int successCount = 0;
+            
+            for (SseEmitter emitter : emitters) {
                 // 안전한 전송 사용
                 boolean sendSuccess = safeSend(emitter, SseEmitter.event()
                         .name("ORDER_NOTIFICATION")
                         .data(notificationData));
-
+                
                 if (sendSuccess) {
-                    // 메트릭: 알림 전송 성공
-                    sseMetrics.recordNotificationSuccess(notificationType);
-                    sseMetrics.stopNotificationTimer(notificationTimer);
-                    
-                    log.info("Order notification sent to userId: {}, type: {}", userId, notificationType);
+                    successCount++;
                 } else {
-                    // 메트릭: 알림 전송 실패
-                    sseMetrics.recordNotificationError(notificationType, "send_failed");
-                    sseMetrics.stopNotificationTimer(notificationTimer);
-                    
-                    log.debug("Failed to send order notification to userId: {} (client disconnect)", userId);
-                    
-                    // 연결 정리
-                    Timer.Sample connectionTimer = connectionTimers.remove(userId);
-                    if (connectionTimer != null) {
-                        sseMetrics.stopConnectionTimer(connectionTimer);
-                    }
-                    emitterMap.remove(userId);
-                    sseMetrics.recordDisconnection();
-                    emitter.complete();
+                    failedEmitters.add(emitter);
                 }
-            } catch (Exception e) {
-                // 예기치 못한 예외
-                sseMetrics.recordNotificationError(notificationType, "unexpected_error");
+            }
+            
+            // 실패한 연결들 정리
+            failedEmitters.forEach(this::removeEmitter);
+            
+            if (successCount > 0) {
+                // 메트릭: 알림 전송 성공
+                sseMetrics.recordNotificationSuccess(notificationType);
                 sseMetrics.stopNotificationTimer(notificationTimer);
                 
-                log.error("Unexpected error sending order notification to userId: {}", userId, e);
+                log.info("Order notification sent to userId: {}, type: {}, success: {}/{}", 
+                        userId, notificationType, successCount, emitters.size());
+            } else {
+                // 메트릭: 알림 전송 실패
+                sseMetrics.recordNotificationError(notificationType, "all_connections_failed");
+                sseMetrics.stopNotificationTimer(notificationTimer);
                 
-                // 연결 정리
-                Timer.Sample connectionTimer = connectionTimers.remove(userId);
-                if (connectionTimer != null) {
-                    sseMetrics.stopConnectionTimer(connectionTimer);
-                }
-                emitterMap.remove(userId);
-                sseMetrics.recordDisconnection();
-                emitter.completeWithError(e);
+                log.debug("Failed to send order notification to userId: {} (all connections failed)", userId);
             }
         } else {
             // 메트릭: 연결 없음
@@ -261,69 +244,60 @@ public class NotificationService {
      * 모든 활성 연결에 heartbeat 메시지를 전송하여 연결 유지
      */
     private void sendHeartbeat() {
-        if (emitterMap.isEmpty()) {
+        if (connectionEmitters.isEmpty()) {
             return;
         }
-
-        log.debug("Sending heartbeat to {} active connections", emitterMap.size());
+        
+        int totalConnections = connectionEmitters.values().stream().mapToInt(Set::size).sum();
+        log.debug("Sending heartbeat to {} active connections", totalConnections);
         
         // 메트릭: Heartbeat 시작
         Timer.Sample heartbeatTimer = sseMetrics.startHeartbeatTimer();
         
         // 실패한 연결들을 저장할 리스트
-        java.util.List<String> failedConnections = new java.util.ArrayList<>();
+        java.util.List<SseEmitter> failedEmitters = new java.util.ArrayList<>();
         int successCount = 0;
         
-        for (Map.Entry<String, SseEmitter> entry : emitterMap.entrySet()) {
-            String userId = entry.getKey();
-            SseEmitter emitter = entry.getValue();
+        for (Map.Entry<String, Set<SseEmitter>> entry : connectionEmitters.entrySet()) {
+            String connectionKey = entry.getKey();
+            Set<SseEmitter> emitters = entry.getValue();
             
-            sseMetrics.recordHeartbeatSent();
-            
-            // 안전한 전송 사용
-            boolean sendSuccess = safeSend(emitter, SseEmitter.event()
-                    .name("HEARTBEAT")
-                    .data(Map.of(
-                            "type", "heartbeat",
-                            "timestamp", System.currentTimeMillis()
-                    )));
-            
-            if (sendSuccess) {
-                sseMetrics.recordHeartbeatSuccess();
-                successCount++;
-                log.trace("Heartbeat sent to userId: {}", userId);
-            } else {
-                sseMetrics.recordHeartbeatFailure();
-                log.debug("Failed to send heartbeat to userId: {}, connection will be removed", userId);
-                failedConnections.add(userId);
+            for (SseEmitter emitter : emitters) {
+                sseMetrics.recordHeartbeatSent();
+                
+                // 안전한 전송 사용
+                boolean sendSuccess = safeSend(emitter, SseEmitter.event()
+                        .name("HEARTBEAT")
+                        .data(Map.of(
+                                "type", "heartbeat",
+                                "timestamp", System.currentTimeMillis()
+                        )));
+                
+                if (sendSuccess) {
+                    sseMetrics.recordHeartbeatSuccess();
+                    successCount++;
+                    log.trace("Heartbeat sent to connection: {}", connectionKey);
+                } else {
+                    sseMetrics.recordHeartbeatFailure();
+                    log.debug("Failed to send heartbeat to connection: {}, connection will be removed", connectionKey);
+                    failedEmitters.add(emitter);
+                }
             }
         }
         
         // 실패한 연결들을 제거
-        failedConnections.forEach(userId -> {
-            SseEmitter emitter = emitterMap.remove(userId);
-            Timer.Sample connectionTimer = connectionTimers.remove(userId);
-            
-            if (connectionTimer != null) {
-                sseMetrics.stopConnectionTimer(connectionTimer);
-            }
-            
-            if (emitter != null) {
-                emitter.completeWithError(new IOException("Heartbeat failed"));
-            }
-            
-            sseMetrics.recordDisconnection();
-        });
+        failedEmitters.forEach(this::removeEmitter);
         
         // 메트릭: Heartbeat 완료
         sseMetrics.stopHeartbeatTimer(heartbeatTimer);
         
         // 연결 수 동기화
-        sseMetrics.setCurrentConnections(emitterMap.size());
+        int currentConnections = connectionEmitters.values().stream().mapToInt(Set::size).sum();
+        sseMetrics.setCurrentConnections(currentConnections);
         
-        if (!failedConnections.isEmpty()) {
+        if (!failedEmitters.isEmpty()) {
             log.info("Heartbeat completed: {} success, {} failed, {} total connections", 
-                     successCount, failedConnections.size(), emitterMap.size());
+                     successCount, failedEmitters.size(), currentConnections);
         }
     }
 
@@ -331,14 +305,16 @@ public class NotificationService {
      * 연결 수 조회
      */
     public int getActiveConnectionCount() {
-        return emitterMap.size();
+        return connectionEmitters.values().stream().mapToInt(Set::size).sum();
     }
 
     /**
      * 특정 사용자의 연결 상태 확인
      */
-    public boolean hasActiveConnection(Long userId) {
-        return emitterMap.containsKey(userId.toString());
+    public boolean hasActiveConnection(Long userId, Long storeId) {
+        String connectionKey = createConnectionKey(userId, storeId);
+        Set<SseEmitter> emitters = connectionEmitters.get(connectionKey);
+        return emitters != null && !emitters.isEmpty();
     }
     
     /**
