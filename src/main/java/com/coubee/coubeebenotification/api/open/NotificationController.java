@@ -21,7 +21,8 @@ public class NotificationController {
     private final NotificationService notificationService;
 
     @GetMapping(value = "/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribe(@RequestParam(required = false) Long storeId, HttpServletResponse response) {
+    public SseEmitter subscribe(@RequestHeader(value = "X-Store-Id", required = false) Long storeId, 
+                               HttpServletResponse response) {
         Long userId = GatewayRequestHeaderUtils.getUserIdOrThrowException();
         
         // storeId가 없으면 기본값 사용
@@ -29,7 +30,7 @@ public class NotificationController {
             storeId = 1L;
         }
         
-        log.info("SSE connection request for userId: {}, storeId: {}", userId, storeId);
+        log.info("SSE connection request for userId: {}, storeId: {} (from header)", userId, storeId);
         
         // SSE 연결을 위한 HTTP 헤더 설정
         response.setHeader("Cache-Control", "no-cache");
@@ -48,7 +49,8 @@ public class NotificationController {
     }
 
     @GetMapping(value = "/status/{userId}")
-    public Map<String, Object> getConnectionStatus(@PathVariable Long userId, @RequestParam(required = false) Long storeId) {
+    public Map<String, Object> getConnectionStatus(@PathVariable Long userId, 
+                                                  @RequestHeader(value = "X-Store-Id", required = false) Long storeId) {
         if (storeId == null) {
             storeId = 1L;
         }
